@@ -30,13 +30,7 @@ async def ai_talk(request: Request):
         line_user_id = event.source.user_id
         line_message = event.message.text
 
-        if line_message=="新規":
-            # LINE メッセージの送信
-            line_bot_api.push_message(line_user_id,TextSendMessage(text='Hello World!'))
-        elif line_message=="更新":
-            # LINE メッセージの送信
-            line_bot_api.push_message(line_user_id, TextSendMessage(text='Hello World!'))
-        else:
-            line_bot_api.push_message(line_user_id, TextSendMessage(text='Hello World!'))
+        print(line_message)
+        line_bot_api.push_message(line_user_id,TextSendMessage(text='Hello World!'))
     #LINE Webhook サーバーへ HTTP レスポンスを返す
     return 'ok'
