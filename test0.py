@@ -38,6 +38,6 @@ async def ai_talk(request: Request):
             # LINE メッセージの送信
             line_bot_api.push_message(line_user_id, TextSendMessage("投稿更新"))
         else:
-
-    # LINE Webhook サーバーへ HTTP レスポンスを返す
+            line_bot_api.push_message(line_user_id, TextSendMessage("無効"))
+    #LINE Webhook サーバーへ HTTP レスポンスを返す
     return 'ok'
