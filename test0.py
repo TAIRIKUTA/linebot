@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from linebot import WebhookParser, LineBotApi
+from linebot import WebhookParser, LineBotApi,WebhookHandler
 from flask import Flask, request, abort
 from linebot.exceptions import (
     InvalidSignatureError
@@ -19,7 +19,7 @@ LINE_CHANNEL_SECRET = os.environ["YOUR_CHANNEL_SECRET"]
 
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-line_parser = WebhookParser(LINE_CHANNEL_SECRET)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
 app = FastAPI()
 
 @app.route("/callback", methods=['POST'])
