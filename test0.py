@@ -5,6 +5,7 @@ from linebot.models import (
     PostbackEvent,
     QuickReply, QuickReplyButton
 )
+from linebot.models.actions import PostbackAction
 import requests
 import json
 import base64
