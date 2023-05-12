@@ -1,17 +1,18 @@
 from fastapi import FastAPI, Request
 from linebot import WebhookParser, LineBotApi
+from flask import Flask, request, abort
+from linebot.exceptions import (
+    InvalidSignatureError
+)
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,TemplateSendMessage,CarouselTemplate,CarouselColumn,
     PostbackEvent,
     QuickReply, QuickReplyButton
 )
 from linebot.models.actions import PostbackAction
-import requests
-import json
-import base64
-import requests
-from urllib.parse import urljoin
 import os
+import re
+import pandas as pd
 
 LINE_CHANNEL_ACCESS_TOKEN = os.environ["YOUR_CHANNEL_ACCESS_TOKEN"]
 LINE_CHANNEL_SECRET = os.environ["YOUR_CHANNEL_SECRET"]
@@ -22,35 +23,73 @@ line_parser = WebhookParser(LINE_CHANNEL_SECRET)
 app = FastAPI()
 
 
-@app.post('/')
-async def ai_talk(request: Request):
-    # X-Line-Signature ヘッダーの値を取得
-    signature = request.headers.get('X-Line-Signature', '')
+@app.route("/callback", methods=['POST'])
+def callback():
+    # get X-Line-Signature header value
+    signature = request.headers['X-Line-Signature']
 
-    # request body から event オブジェクトを取得
-    events = line_parser.parse((await request.body()).decode('utf-8'), signature)
+    # get request body as text
+    body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
 
-    # 各イベントの処理（※1つの Webhook に複数の Webhook イベントオブジェっｚクトが含まれる場合あるため）
-    for event in events:
-        if event.type != 'message':
-            continue
-        if event.message.type != 'text':
-            continue
+    # handle webhook body
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return 'OK'
 
-        # LINE パラメータの取得
-        line_user_id = event.source.user_id
-        line_message = event.message.text
+# メッセージを受け取った時のアクション
+@handler.add(MessageEvent, message=TextMessage)
+def send_infomation(event):
+    if event.reply_token == "00000000000000000000000000000000":
+        return
+    msg = event.message.text
+    if msg == "新規":
+        make_quick_reply(event.reply_token, "新規投稿しますか？")
+    elif msg == "更新":
+        make_quick_reply(event.reply_token, "投稿記事を更新しますか？")
+    else:
+        line_bot_api.push_message(line_user_id, TextSendMessage("無効"))
 
-        if line_message=="新規":
-           # LINE メッセージの送信
-           line_bot_api.push_message(line_user_id, TextSendMessage('"記事タイトル"を入力して'))
-           columns_list = []
-           columns_list.append(CarouselColumn(title=line_message, text="記事タイトルはこれでいい？", actions=[PostbackAction(label="YES", data=f"NO"), PostbackAction(label="NO", data=f"NO")]))
-           #columns_list.append(CarouselColumn(title="タイトルだよ", text="よろしくね", actions=[PostbackAction(label="詳細を表示", data=f"詳細表示"), PostbackAction(label="削除", data=f"削除")]))
-           carousel_template_message = TemplateSendMessage(
-                                       alt_text='会話ログを表示しています',
-                                       template=CarouselTemplate(columns=columns_list)
-                                       )
-           line_bot_api.reply_message(event.reply_token, messages=carousel_template_message)
-    # LINE Webhook サーバーへ HTTP レスポンスを返す
-    return 'ok'
+# PostbackActionがあった時のアクション
+@handler.add(PostbackEvent)
+def on_postback(event):
+    postback_msg = event.postback.data
+    if re.search(r"YES", postback_msg):
+        show_num = int(re.search(r"都道府県を表示&num=([0-9]+)", postback_msg).group(1))
+        columns_list = []
+        if show_num >= 5:
+            for prefecture, capital in zip(df["都道府県"][9*show_num:], df["県庁所在地"][9*show_num:]):
+                columns_list.append(CarouselColumn(title=f"{prefecture}", text="県庁所在地を表示しますか", actions=[PostbackAction(label="表示します", data=f"{prefecture}の県庁所在地は{capital}です")]))
+            carousel_template_message = TemplateSendMessage(
+                            alt_text='都道府県について表示しています',
+                            template=CarouselTemplate(columns=columns_list)
+                            )
+            line_bot_api.reply_message(event.reply_token, messages=carousel_template_message)
+        else:
+            for prefecture, capital in zip(df["都道府県"][9*show_num:9*show_num+9], df["県庁所在地"][9*show_num:9*show_num+9]):
+                columns_list.append(CarouselColumn(title=f"{prefecture}", text="県庁所在地を表示しますか", actions=[PostbackAction(label="表示します", data=f"{prefecture}の県庁所在地は{capital}です")]))
+            columns_list.append(CarouselColumn(title=f"次を表示する", text="次へ", actions=[PostbackAction(label="次の都道府県を表示", data=f"都道府県を表示&num={show_num + 1}")]))
+            carousel_template_message = TemplateSendMessage(
+                            alt_text='都道府県について表示しています',
+                            template=CarouselTemplate(columns=columns_list)
+                            )
+            line_bot_api.reply_message(event.reply_token, messages=carousel_template_message)
+
+    if postback_msg == "キャンセル":
+        messages = TextSendMessage(text="キャンセルしました")
+        line_bot_api.reply_message(event.reply_token, messages=messages)
+
+    if re.search(r".+の県庁所在地は.+です", postback_msg):
+        text = re.search(r"(.+の県庁所在地は.+です)", postback_msg).group(1)
+        messages = TextSendMessage(text=text)
+        line_bot_api.reply_message(event.reply_token, messages=messages)
+
+def make_quick_reply(token, text):
+    items = []
+    items.append(QuickReplyButton(action=PostbackAction(label='YES', data='YES')))
+    items.append(QuickReplyButton(action=PostbackAction(label='キャンセル', data='キャンセル')))
+    messages = TextSendMessage(text=text,
+                            quick_reply=QuickReply(items=items))
+    line_bot_api.reply_message(token, messages=messages)
