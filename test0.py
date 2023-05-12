@@ -1,69 +1,63 @@
 from fastapi import FastAPI, Request
-from linebot import WebhookParser, LineBotApi,WebhookHandler
-from flask import Flask, request, abort
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,TemplateSendMessage,CarouselTemplate,CarouselColumn,
-    PostbackEvent,
-    QuickReply, QuickReplyButton
-)
-from linebot.models.actions import PostbackAction
+import openai
+from linebot import WebhookParser, LineBotApi
+from linebot.models import TextSendMessage
 import os
-import re
-import pandas as pd
 
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 LINE_CHANNEL_ACCESS_TOKEN = os.environ["YOUR_CHANNEL_ACCESS_TOKEN"]
 LINE_CHANNEL_SECRET = os.environ["YOUR_CHANNEL_SECRET"]
+OPENAI_CHARACTER_PROFILE = '''
+これから会話を行います。以下の条件を絶対に守って回答してください。
+あなたは天才プログラマー八神雷（やがみ　らいと）として会話してください。
+質問に答えられない場合は、会話を濁してください。
+'''
 
 
+openai.api_key = OPENAI_API_KEY
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
+line_parser = WebhookParser(LINE_CHANNEL_SECRET)
 app = FastAPI()
 
-@app.route("/callback", methods=['POST'])
-def callback():
-    # get X-Line-Signature header value
-    signature = request.headers['X-Line-Signature']
 
-    # get request body as text
-    body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
+@app.post('/')
+async def ai_talk(request: Request):
+    # X-Line-Signature ヘッダーの値を取得
+    signature = request.headers.get('X-Line-Signature', '')
 
-    # handle webhook body
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return 'OK'
-# メッセージを受け取った時のアクション
-@handler.add(MessageEvent, message=TextMessage)
-def send_infomation(event):
-    if event.reply_token == "00000000000000000000000000000000":
-        return
-    msg = event.message.text
-    if msg == "新規":
-        make_quick_reply(event.reply_token, "新規投稿しますか？")
-    elif msg == "更新":
-        make_quick_reply(event.reply_token, "投稿記事を更新しますか？")
-    else:
-        line_bot_api.push_message(line_user_id, TextSendMessage("無効"))
+    # request body から event オブジェクトを取得
+    events = line_parser.parse((await request.body()).decode('utf-8'), signature)
 
-# PostbackActionがあった時のアクション
-@handler.add(PostbackEvent)
-def on_postback(event):
-    postback_msg = event.postback.data
+    # 各イベントの処理（※1つの Webhook に複数の Webhook イベントオブジェっｚクトが含まれる場合あるため）
+    for event in events:
+        if event.type != 'message':
+            continue
+        if event.message.type != 'text':
+            continue
 
-    if postback_msg == "キャンセル":
-        messages = TextSendMessage(text="キャンセルしました")
-        line_bot_api.reply_message(event.reply_token, messages=messages)
+        # LINE パラメータの取得
+        line_user_id = event.source.user_id
+        line_message = event.message.text
 
+        # ChatGPT からトークデータを取得
+        response = openai.ChatCompletion.create(
+            model = 'gpt-3.5-turbo'
+            , temperature = 0.5
+            , messages = [
+                {
+                    'role': 'system'
+                    , 'content': OPENAI_CHARACTER_PROFILE.strip()
+                }
+                , {
+                    'role': 'user'
+                    , 'content': line_message
+                }
+            ]
+        )
+        ai_message = response['choices'][0]['message']['content']
 
-def make_quick_reply(token, text):
-    items = []
-    items.append(QuickReplyButton(action=PostbackAction(label='YES', data='YES')))
-    items.append(QuickReplyButton(action=PostbackAction(label='キャンセル', data='キャンセル')))
-    messages = TextSendMessage(text=text,
-                            quick_reply=QuickReply(items=items))
-    line_bot_api.reply_message(token, messages=messages)
+        # LINE メッセージの送信
+        line_bot_api.push_message(line_user_id, TextSendMessage(ai_message))
+
+    # LINE Webhook サーバーへ HTTP レスポンスを返す
+    return 'ok'
