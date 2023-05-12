@@ -1,20 +1,12 @@
 from fastapi import FastAPI, Request
-import openai
 from linebot import WebhookParser, LineBotApi
 from linebot.models import TextSendMessage
 import os
 
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 LINE_CHANNEL_ACCESS_TOKEN = os.environ["YOUR_CHANNEL_ACCESS_TOKEN"]
 LINE_CHANNEL_SECRET = os.environ["YOUR_CHANNEL_SECRET"]
-OPENAI_CHARACTER_PROFILE = '''
-これから会話を行います。以下の条件を絶対に守って回答してください。
-あなたは天才プログラマー八神雷（やがみ　らいと）として会話してください。
-質問に答えられない場合は、会話を濁してください。
-'''
 
 
-openai.api_key = OPENAI_API_KEY
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 line_parser = WebhookParser(LINE_CHANNEL_SECRET)
 app = FastAPI()
@@ -39,25 +31,9 @@ async def ai_talk(request: Request):
         line_user_id = event.source.user_id
         line_message = event.message.text
 
-        # ChatGPT からトークデータを取得
-        response = openai.ChatCompletion.create(
-            model = 'gpt-3.5-turbo'
-            , temperature = 0.5
-            , messages = [
-                {
-                    'role': 'system'
-                    , 'content': OPENAI_CHARACTER_PROFILE.strip()
-                }
-                , {
-                    'role': 'user'
-                    , 'content': line_message
-                }
-            ]
-        )
-        ai_message = response['choices'][0]['message']['content']
 
         # LINE メッセージの送信
-        line_bot_api.push_message(line_user_id, TextSendMessage(ai_message))
+        line_bot_api.push_message(line_user_id, TextSendMessage(line_message))
 
     # LINE Webhook サーバーへ HTTP レスポンスを返す
     return 'ok'
