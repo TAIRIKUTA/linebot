@@ -1,7 +1,22 @@
 from fastapi import FastAPI, Request
 from linebot import WebhookParser, LineBotApi
 from linebot.models import TextSendMessage
+import requests
+import json
+import base64
+import requests
+from urllib.parse import urljoin
 import os
+import pandas as pd
+import math
+import re
+import glob
+import pykakasi
+import math
+import re
+from decimal import Decimal
+import unicodedata
+import mojimoji
 
 LINE_CHANNEL_ACCESS_TOKEN = os.environ["YOUR_CHANNEL_ACCESS_TOKEN"]
 LINE_CHANNEL_SECRET = os.environ["YOUR_CHANNEL_SECRET"]
@@ -31,15 +46,16 @@ async def ai_talk(request: Request):
         line_user_id = event.source.user_id
         line_message = event.message.text
 
-        if line_message=="新規":
-            # LINE メッセージの送信
-            line_bot_api.push_message(line_user_id, TextSendMessage("新規"))
-        elif line_message=="更新":
-            # LINE メッセージの送信
-            line_bot_api.push_message(line_user_id, TextSendMessage("更新"))
-        else:
-            # LINE メッセージの送信
-            line_bot_api.push_message(line_user_id, TextSendMessage("無効"))
-            
+
+        # LINE メッセージの送信
+        line_bot_api.push_message(line_user_id, TextSendMessage(line_message))
+        columns_list = []
+        columns_list.append(CarouselColumn(title=line_message, text="記事タイトルはこれでいい？", actions=[PostbackAction(label="YES", data=f"NO"), PostbackAction(label="NO", data=f"NO")]))
+        #columns_list.append(CarouselColumn(title="タイトルだよ", text="よろしくね", actions=[PostbackAction(label="詳細を表示", data=f"詳細表示"), PostbackAction(label="削除", data=f"削除")]))
+        carousel_template_message = TemplateSendMessage(
+                                    alt_text='会話ログを表示しています',
+                                    template=CarouselTemplate(columns=columns_list)
+                                    )
+        line_bot_api.reply_message(event.reply_token, messages=carousel_template_message)
     # LINE Webhook サーバーへ HTTP レスポンスを返す
     return 'ok'
