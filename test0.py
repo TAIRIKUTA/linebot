@@ -7,16 +7,6 @@ import base64
 import requests
 from urllib.parse import urljoin
 import os
-import pandas as pd
-import math
-import re
-import glob
-import pykakasi
-import math
-import re
-from decimal import Decimal
-import unicodedata
-import mojimoji
 
 LINE_CHANNEL_ACCESS_TOKEN = os.environ["YOUR_CHANNEL_ACCESS_TOKEN"]
 LINE_CHANNEL_SECRET = os.environ["YOUR_CHANNEL_SECRET"]
