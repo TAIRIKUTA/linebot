@@ -7,5 +7,3 @@ gunicorn
 flask
 pandas
 pykakasi
-unicodedata
-mojimoji
